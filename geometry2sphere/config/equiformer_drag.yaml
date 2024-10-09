@@ -1,0 +1,108 @@
+# @package _global_
+
+# defaults:
+#   - _self_
+#   - data: radar
+#   - module: g2s 
+#   - trainer: default
+
+experiment_name: drag 
+ROOT_DATA_PATH: 'geometry2sphere/datasets'
+RESULTS_PATH: 'geometry2sphere/datasets/out'
+batch_size: 16
+num_workers: 12
+
+train_dataset:
+  _target_: g2s.datasets.drag_dataset.DragDataset
+  root: ${ROOT_DATA_PATH}/drag_pods/
+  stage: train
+  transform:
+    _target_: g2s.datasets.transforms.general.Compose
+    transforms:
+      - _target_: g2s.datasets.transforms.radar.Normalize
+        data_min: -0.06614039
+        data_max: 0.1890188
+        target_min: -1.0
+        target_max: 1.0
+
+val_dataset:
+  _target_: g2s.datasets.drag_dataset.DragDataset
+  root: ${ROOT_DATA_PATH}/drag_pods/
+  stage: val
+  transform:
+    _target_: g2s.datasets.transforms.general.Compose
+    transforms:
+      - _target_: g2s.datasets.transforms.radar.Normalize
+        data_min: -0.06614039
+        data_max: 0.1890188
+        target_min: -1.0
+        target_max: 1.0
+
+
+test_dataset:
+  _target_: g2s.datasets.drag_dataset.DragDataset
+  root: ${ROOT_DATA_PATH}/drag_pods/
+  stage: test
+  transform:
+    _target_: g2s.datasets.transforms.general.Compose
+    transforms:
+      - _target_: g2s.datasets.transforms.radar.Normalize
+        data_min: -0.06614039
+        data_max: 0.1890188
+        target_min: -1.0
+        target_max: 1.0
+
+module:
+  _target_: g2s.lightning.drag.DragLightningModule
+
+  backbone: 
+    _target_: g2s.models.equiformer.EquiformerDragDecoder
+    lmax: 5
+    latent_feat_dim: 128
+    max_radius: 1.0
+    num_layers: 4
+    num_heads: 4
+
+  criterion:
+    _target_: g2s.lightning.drag.MSELoss
+    reduction: sum
+
+  optim:
+    optimizer: 
+      _target_: torch.optim.AdamW
+      _partial_: True
+      lr: 1e-5
+      weight_decay: 1e-5
+    lr_scheduler:
+      _target_: torch.optim.lr_scheduler.StepLR
+      _partial_: True
+      gamma: 0.1
+      step_size: 15
+
+trainer:
+  _target_: pytorch_lightning.trainer.Trainer
+
+  devices: auto
+  accelerator: cuda
+  strategy: ddp
+  num_nodes: 1
+  max_epochs: 10
+  gradient_clip_val: 0.5
+  num_sanity_val_steps: 0
+  logger:
+    _target_: pytorch_lightning.loggers.MLFlowLogger
+    experiment_name: ${experiment_name}
+    run_name: ${experiment_name}/${now:%Y-%m-%d-%H-%M-%S}
+    tracking_uri: ${RESULTS_PATH}/mlflow/
+  callbacks:
+    - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+      dirpath: "."
+      filename: "model_{epoch}"
+      monitor: "val/loss"
+      save_last: True
+    - _target_: pytorch_lightning.callbacks.LearningRateMonitor
+
+
+hydra:
+  run:
+    dir: ${RESULTS_PATH}/hydra/${experiment_name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
