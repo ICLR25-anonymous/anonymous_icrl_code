@@ -1,1 +1,1 @@
-# Object2Sphere
+# Geometry2Sphere
